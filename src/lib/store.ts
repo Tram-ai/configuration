@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useCallback, useEffect } from "react";
-import type { Provider, ApprovalMode, ProxyConfig, TramConfig, ProviderEntry } from "./types";
+import type { Provider, ApprovalMode, ProxyConfig, TramConfig, ProviderEntry, ModelGenerationConfig } from "./types";
 import { THEME_PRESETS } from "./types";
 
 function generateModelAlias(modelId: string, providerId: string): string {
@@ -22,6 +22,46 @@ function generateModelAlias(modelId: string, providerId: string): string {
   return `${base}-${providerPart}${suffix}`;
 }
 
+function parseOptionalNumber(value: string): number | undefined {
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+
+  const parsed = Number(trimmed);
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+function parseOptionalPositiveInteger(value: string): number | undefined {
+  const parsed = parseOptionalNumber(value);
+  if (parsed === undefined || !Number.isInteger(parsed) || parsed <= 0) {
+    return undefined;
+  }
+
+  return parsed;
+}
+
+function parseFallbackModels(value: string): string[] {
+  return value
+    .split(/\r?\n|,/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function buildGenerationConfig(temperatureInput: string, maxTokensInput: string): ModelGenerationConfig | undefined {
+  const temperature = parseOptionalNumber(temperatureInput);
+  const maxTokens = parseOptionalPositiveInteger(maxTokensInput);
+
+  if (temperature === undefined && maxTokens === undefined) {
+    return undefined;
+  }
+
+  return {
+    samplingParams: {
+      ...(temperature !== undefined ? { temperature } : {}),
+      ...(maxTokens !== undefined ? { max_tokens: maxTokens } : {}),
+    },
+  };
+}
+
 const STORAGE_KEY = 'tram-init-web-config';
 
 interface SavedConfig {
@@ -29,6 +69,9 @@ interface SavedConfig {
   approvalMode: ApprovalMode;
   themeId: string;
   proxy: ProxyConfig;
+  modelTemperature?: string;
+  modelMaxTokens?: string;
+  fallbackModelsText?: string;
   douyinMcpEndpoint: string;
   siliconFlowApiKey: string;
   injectToolCallIntro?: boolean;
@@ -50,6 +93,9 @@ export function useConfigStore() {
   const [approvalMode, setApprovalMode] = useState<ApprovalMode>("yolo");
   const [themeId, setThemeId] = useState("tram-dark");
   const [proxy, setProxy] = useState<ProxyConfig>({ enabled: false, mode: "off", url: "" });
+  const [modelTemperature, setModelTemperature] = useState("");
+  const [modelMaxTokens, setModelMaxTokens] = useState("");
+  const [fallbackModelsText, setFallbackModelsText] = useState("");
   const [douyinMcpEndpoint, setDouyinMcpEndpoint] = useState("");
   const [siliconFlowApiKey, setSiliconFlowApiKey] = useState("");
   const [injectToolCallIntro, setInjectToolCallIntro] = useState(false);
@@ -67,6 +113,9 @@ export function useConfigStore() {
       if (saved.approvalMode) setApprovalMode(saved.approvalMode);
       if (saved.themeId) setThemeId(saved.themeId);
       if (saved.proxy) setProxy(saved.proxy);
+      if (saved.modelTemperature) setModelTemperature(saved.modelTemperature);
+      if (saved.modelMaxTokens) setModelMaxTokens(saved.modelMaxTokens);
+      if (saved.fallbackModelsText) setFallbackModelsText(saved.fallbackModelsText);
       if (saved.douyinMcpEndpoint) setDouyinMcpEndpoint(saved.douyinMcpEndpoint);
       if (saved.siliconFlowApiKey) setSiliconFlowApiKey(saved.siliconFlowApiKey);
       if (saved.injectToolCallIntro !== undefined) setInjectToolCallIntro(saved.injectToolCallIntro);
@@ -83,13 +132,16 @@ export function useConfigStore() {
         approvalMode,
         themeId,
         proxy,
+        modelTemperature,
+        modelMaxTokens,
+        fallbackModelsText,
         douyinMcpEndpoint,
         siliconFlowApiKey,
         injectToolCallIntro,
       };
       window.localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
     } catch { /* quota exceeded etc. */ }
-  }, [storageLoaded, providers, approvalMode, themeId, proxy, douyinMcpEndpoint, siliconFlowApiKey, injectToolCallIntro]);
+  }, [storageLoaded, providers, approvalMode, themeId, proxy, modelTemperature, modelMaxTokens, fallbackModelsText, douyinMcpEndpoint, siliconFlowApiKey, injectToolCallIntro]);
 
   const activeTheme = THEME_PRESETS.find((t) => t.id === themeId) ?? THEME_PRESETS[0];
 
@@ -115,6 +167,8 @@ export function useConfigStore() {
     const modelProviders: Record<string, ProviderEntry[]> = {};
     const env: Record<string, string> = {};
     let firstModelId: string | undefined;
+    const generationConfig = buildGenerationConfig(modelTemperature, modelMaxTokens);
+    const fallbacks = parseFallbackModels(fallbackModelsText);
 
     for (const p of providers) {
       const authType = p.type;
@@ -137,6 +191,7 @@ export function useConfigStore() {
         ...(isOpenAI ? { upstreamModelId } : {}),
         ...(p.apiKeyEnvVar ? { envKey: p.apiKeyEnvVar } : {}),
         ...(p.baseUrl ? { baseUrl: p.baseUrl } : {}),
+        ...(generationConfig ? { generationConfig } : {}),
       };
 
       modelProviders[authType].push(entry);
@@ -160,6 +215,8 @@ export function useConfigStore() {
       },
       model: {
         ...(firstModelId ? { name: firstModelId } : {}),
+        ...(fallbacks.length ? { fallbacks } : {}),
+        ...(generationConfig ? { generationConfig } : {}),
       },
       tools: { approvalMode },
       ui: { theme: activeTheme.name },
@@ -178,7 +235,7 @@ export function useConfigStore() {
     }
 
     return config;
-  }, [providers, approvalMode, activeTheme, proxy, douyinMcpEndpoint, siliconFlowApiKey, injectToolCallIntro]);
+  }, [providers, approvalMode, activeTheme, proxy, modelTemperature, modelMaxTokens, fallbackModelsText, douyinMcpEndpoint, siliconFlowApiKey, injectToolCallIntro]);
 
   const WORKER_BASE = 'https://modelscope.912778.xyz';
 
@@ -299,6 +356,9 @@ export function useConfigStore() {
     themeId,
     proxy,
     activeTheme,
+    modelTemperature,
+    modelMaxTokens,
+    fallbackModelsText,
     douyinMcpEndpoint,
     siliconFlowApiKey,
     injectToolCallIntro,
@@ -308,6 +368,9 @@ export function useConfigStore() {
     setApprovalMode,
     selectTheme,
     setProxy,
+    setModelTemperature,
+    setModelMaxTokens,
+    setFallbackModelsText,
     setDouyinMcpEndpoint,
     setSiliconFlowApiKey,
     setInjectToolCallIntro,

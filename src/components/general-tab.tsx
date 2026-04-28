@@ -4,12 +4,19 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
-import { Settings, Loader2, CheckCircle2, AlertCircle } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
+import { Settings, SlidersHorizontal, Loader2, CheckCircle2, AlertCircle } from "lucide-react";
 
 interface GeneralTabProps {
+  modelTemperature: string;
+  modelMaxTokens: string;
+  fallbackModelsText: string;
   douyinMcpEndpoint: string;
   siliconFlowApiKey: string;
   injectToolCallIntro: boolean;
+  setModelTemperature: (v: string) => void;
+  setModelMaxTokens: (v: string) => void;
+  setFallbackModelsText: (v: string) => void;
   setDouyinMcpEndpoint: (v: string) => void;
   setSiliconFlowApiKey: (v: string) => void;
   setInjectToolCallIntro: (v: boolean) => void;
@@ -19,9 +26,15 @@ interface GeneralTabProps {
 }
 
 export function GeneralTab({
+  modelTemperature,
+  modelMaxTokens,
+  fallbackModelsText,
   douyinMcpEndpoint,
   siliconFlowApiKey,
   injectToolCallIntro,
+  setModelTemperature,
+  setModelMaxTokens,
+  setFallbackModelsText,
   setDouyinMcpEndpoint,
   setSiliconFlowApiKey,
   setInjectToolCallIntro,
@@ -37,6 +50,60 @@ export function GeneralTab({
       </div>
 
       <div className="space-y-4">
+        <div className="space-y-4 rounded-xl border border-border/70 bg-card/40 p-4">
+          <div className="flex items-center gap-2">
+            <SlidersHorizontal className="h-4 w-4 text-accent" />
+            <div>
+              <h4 className="text-sm font-medium">模型参数</h4>
+              <p className="text-[11px] text-muted-foreground">
+                会写入 model.generationConfig，并同步到每个 modelProviders 条目，保证 provider 模型也能吃到这些采样参数。
+              </p>
+            </div>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="space-y-2">
+              <Label className="text-xs font-mono">temperature</Label>
+              <Input
+                type="number"
+                step="0.1"
+                placeholder="例如 0.2"
+                value={modelTemperature}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setModelTemperature(e.target.value)}
+                className="font-mono text-xs"
+              />
+              <p className="text-[11px] text-muted-foreground">留空则沿用模型默认采样温度。</p>
+            </div>
+
+            <div className="space-y-2">
+              <Label className="text-xs font-mono">max_tokens</Label>
+              <Input
+                type="number"
+                min="1"
+                step="1"
+                placeholder="例如 4096"
+                value={modelMaxTokens}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setModelMaxTokens(e.target.value)}
+                className="font-mono text-xs"
+              />
+              <p className="text-[11px] text-muted-foreground">留空则保持 Qwen Code 的自适应输出 token 策略。</p>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label className="text-xs font-mono">Fallback Models</Label>
+            <Textarea
+              placeholder={"backup-model\nopenai:gpt-4.1-mini\nanthropic:claude-3-5-sonnet"}
+              value={fallbackModelsText}
+              onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setFallbackModelsText(e.target.value)}
+              className="min-h-24 font-mono text-xs"
+            />
+            <p className="text-[11px] text-muted-foreground">
+              一行一个，也支持逗号分隔。可以填已配置模型，也可以直接填 openai:gpt-4.1-mini 这种跨 provider 目标。
+            </p>
+          </div>
+        </div>
+
         <div className="space-y-2">
           <Label className="text-xs font-mono">抖音 MCP 端点</Label>
           <div className="flex items-center gap-2">

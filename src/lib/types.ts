@@ -9,6 +9,19 @@ export interface Provider {
   useGateway?: boolean; // 是否启用 Cloudflare AI Gateway 中转
 }
 
+export interface ModelGenerationConfig {
+  samplingParams?: {
+    temperature?: number;
+    max_tokens?: number;
+  };
+}
+
+export interface ModelSettings {
+  name?: string;
+  fallbacks?: string[];
+  generationConfig?: ModelGenerationConfig;
+}
+
 export interface ThemeColors {
   bg: string;
   fg: string;
@@ -48,9 +61,7 @@ export interface TramConfig {
     proxy?: string;
     proxyMode?: string;
   };
-  model: {
-    name?: string;
-  };
+  model: ModelSettings;
   tools: {
     approvalMode: ApprovalMode;
   };
@@ -71,6 +82,7 @@ export interface ProviderEntry {
   upstreamModelId?: string;
   envKey?: string;
   baseUrl?: string;
+  generationConfig?: ModelGenerationConfig;
 }
 
 export const PROVIDER_PRESETS: Record<string, {

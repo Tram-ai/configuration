@@ -9,22 +9,27 @@ import { ApprovalTab } from "@/components/approval-tab";
 import { ProxyTab } from "@/components/proxy-tab";
 import { GeneralTab } from "@/components/general-tab";
 import { useConfigStore } from "@/lib/store";
+import { useUiAppearance } from "@/lib/use-ui-appearance";
 import { cn } from "@/lib/utils";
-import { Save, Copy, Check, Download, Terminal, Moon, Sun, X, Loader2 } from "lucide-react";
+import { Save, Copy, Check, Download, Terminal, Moon, Sun, X, Loader2, WifiOff } from "lucide-react";
 
-type UiAppearance = "light" | "dark";
 type SaveStatus = "idle" | "saving" | "success" | "failed";
+
+const getPortFromSearch = (search: string) => {
+  const params = new URLSearchParams(search);
+  return params.get("port") ?? params.get("PORT");
+};
 
 export default function Home() {
   const store = useConfigStore();
+  const { appearance, setAppearance } = useUiAppearance();
   const [saveOpen, setSaveOpen] = useState(false);
   const [copied, setCopied] = useState(false);
-  const [appearance, setAppearance] = useState<UiAppearance>("light");
-  const [appearanceInitialized, setAppearanceInitialized] = useState(false);
   const [themeCollapsed, setThemeCollapsed] = useState(false);
   const [networkCollapsed, setNetworkCollapsed] = useState(false);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
   const [isOAuthCallback, setIsOAuthCallback] = useState(false);
+  const [isOfflineMode, setIsOfflineMode] = useState(false);
 
   // ── Pollinations OAuth callback detection ──
   useEffect(() => {
@@ -46,22 +51,10 @@ export default function Home() {
   const jsonOutput = useMemo(() => JSON.stringify(config), [config]);
 
   useEffect(() => {
-    const savedAppearance = window.localStorage.getItem("tram-init-web-appearance");
-    if (savedAppearance === "light" || savedAppearance === "dark") {
-      setAppearance(savedAppearance);
-    } else if (window.matchMedia("(prefers-color-scheme: dark)").matches) {
-      setAppearance("dark");
-    }
-    setAppearanceInitialized(true);
+    const search = window.location.search;
+    const port = getPortFromSearch(search);
+    setIsOfflineMode(!port);
   }, []);
-
-  useEffect(() => {
-    if (!appearanceInitialized) return;
-    const root = document.documentElement;
-    root.dataset.uiAppearance = appearance;
-    root.style.colorScheme = appearance;
-    window.localStorage.setItem("tram-init-web-appearance", appearance);
-  }, [appearance, appearanceInitialized]);
 
   useEffect(() => {
     if (!saveOpen) {
@@ -95,8 +88,7 @@ export default function Home() {
   };
 
   const handleSave = async () => {
-    const params = new URLSearchParams(window.location.search);
-    const port = params.get("port");
+    const port = getPortFromSearch(window.location.search);
 
     // No server port — fall back to copy dialog immediately
     if (!port) {
@@ -118,7 +110,10 @@ export default function Home() {
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
       setSaveStatus("success");
-      setTimeout(() => setSaveStatus("idle"), 2500);
+      window.setTimeout(() => {
+        window.close();
+        window.setTimeout(() => setSaveStatus("idle"), 1200);
+      }, 350);
     } catch (error) {
       console.error("Failed to save config:", error);
       setSaveStatus("idle");
@@ -136,8 +131,16 @@ export default function Home() {
       </div>
     ) :
     <div className="flex h-screen flex-col overflow-hidden bg-background text-foreground">
+      {isOfflineMode ? (
+        <div className="shrink-0 border-b border-amber-500/30 bg-amber-500/10 px-4 py-2 text-sm text-amber-700 dark:text-amber-300">
+          <div className="flex items-center gap-2">
+            <WifiOff className="h-4 w-4" />
+            当前处于离线模式，更改需要自行覆盖配置文件。
+          </div>
+        </div>
+      ) : null}
       <header className="shrink-0 border-b border-border bg-background/95 backdrop-blur-sm">
-        <div className="mx-auto flex max-w-screen-2xl items-center gap-3 px-4 py-3">
+        <div className="flex items-center gap-3 px-4 py-3">
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-2">
               <Terminal className="h-5 w-5 text-accent" />
@@ -336,9 +339,15 @@ export default function Home() {
                     <ProxyTab proxy={store.proxy} setProxy={store.setProxy} />
                     <div className="border-t border-border pt-6">
                       <GeneralTab
+                        modelTemperature={store.modelTemperature}
+                        modelMaxTokens={store.modelMaxTokens}
+                        fallbackModelsText={store.fallbackModelsText}
                         douyinMcpEndpoint={store.douyinMcpEndpoint}
                         siliconFlowApiKey={store.siliconFlowApiKey}
                         injectToolCallIntro={store.injectToolCallIntro}
+                        setModelTemperature={store.setModelTemperature}
+                        setModelMaxTokens={store.setModelMaxTokens}
+                        setFallbackModelsText={store.setFallbackModelsText}
                         setDouyinMcpEndpoint={store.setDouyinMcpEndpoint}
                         setSiliconFlowApiKey={store.setSiliconFlowApiKey}
                         setInjectToolCallIntro={store.setInjectToolCallIntro}
